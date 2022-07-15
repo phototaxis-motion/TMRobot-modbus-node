@@ -1,26 +1,10 @@
-// https://github.com/yaacov/node-modbus-serial
-// connectRTU(path: string, options: SerialPortOptions, next: Function): void;
-// connectRTU(path: string, options: SerialPortOptions): Promise<void>;
-// connectTCP(ip: string, options: TcpPortOptions, next: Function): void;
-// connectTCP(ip: string, options: TcpPortOptions): Promise<void>;
-// connectUDP(ip: string, options: UdpPortOptions, next: Function): void;
-// connectUDP(ip: string, options: UdpPortOptions): Promise<void>;
-// connectTcpRTUBuffered(ip: string, options: TcpRTUPortOptions, next: Function): void;
-// connectTcpRTUBuffered(ip: string, options: TcpRTUPortOptions): Promise<void>;
-// connectTelnet(ip: string, options: TelnetPortOptions, next: Function): void;
-// connectTelnet(ip: string, options: TelnetPortOptions): Promise<void>;
-// connectC701(ip: string, options: C701PortOptions, next: Function): void;
-// connectC701(ip: string, options: C701PortOptions): Promise<void>;
-// connectRTUBuffered(path: string, options: SerialPortOptions, next: Function): void;
-// connectRTUBuffered(path: string, options: SerialPortOptions): Promise<void>;
-// connectAsciiSerial(path: string, options: SerialPortOptions, next: Function): void;
-// connectAsciiSerial(path: string, options: SerialPortOptions): Promise<void>;
-// connectRTUSocket(socket: string, next: Function): void;
 var ModbusRTU = require("modbus-serial");
 var client = new ModbusRTU();
-const TCP_IP = "127.0.0.1"
+const TCP_IP = "169.254.68.61"
 const TCP_PORT = 502
-const DEFAULT_RESPONSE = []
+const DATA_ADDRESS = 7013
+const DATA_ADDRESS_LENGTH = 12
+const DEFAULT_RESPONSE = [ 14560, 0 , 47262 , 45056, 14594 , 39936, 47592, 57344, 14290, 8192, 14709 ,58368 ] // Degree: [0,0,0,0,0,0]
 
 
 // Logger TCP
@@ -30,21 +14,6 @@ client.setID(1);
 // set timeout, if slave did not reply back
 client.setTimeout(500);
 
-// ########## Archive Start ##########
-
-// // open connection to a udp line
-// client.connectUDP("127.0.0.1", { port: 8502 });
-// client.setID(1);
-
-// // Read on multiple slaves
-// // open connection to a serial port
-// client.connectRTUBuffered("/dev/ttyS0", { baudRate: 9600 });
-// // set timeout, if slave did not reply back
-// client.setTimeout(500);
-
-// ########## Archive End ##########
-
-// ########## Node server Start ##########
 // Express
 const express = require('express')
 const app = express()
@@ -56,12 +25,30 @@ console.log("Start Express App.")
 // readHoldingRegisters(dataAddress: number, length: number): Promise
 const getTCPData = async (reconnect = false) => {
   try {
-    const { data = [] } = await client.readHoldingRegisters(0, 10)
-    return data
+    // const { data = [] } = await client.readHoldingRegisters(0, 10)
+    const { data = DEFAULT_RESPONSE } = await client.readInputRegisters(DATA_ADDRESS, DATA_ADDRESS_LENGTH)
+    const buf = Buffer.from(
+      data.map((int => {
+        const str16 = int.toString(16).padStart(4, '0')
+        return [
+          parseInt(str16.slice(0,2), 16),
+          parseInt(str16.slice(2,4), 16)
+        ]
+      })).flat()
+    )
+    
+    return [
+      buf.readFloatBE(0),
+      buf.readFloatBE(4),
+      buf.readFloatBE(8),
+      buf.readFloatBE(12),
+      buf.readFloatBE(16),
+      buf.readFloatBE(20),
+    ]
   } catch(e) {
     console.trace("getTCPData Error")
     console.log(`${e.name}: ${e.message}`)
-    if (reconnect) {
+    if (reconnect) { // 防止頻傳打發生的斷線
       client.connectTCP(TCP_IP, { port: TCP_PORT });
       client.setID(1);
       return await getTCPData(false)
