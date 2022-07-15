@@ -9,7 +9,7 @@ yarn
 node index.js
 ```
 
-# Ping [(test.js)](./(test.js))
+# Ping [(test.js)](./test.js)
 
 改 TCP_IP & TCP_PORT
 ```
